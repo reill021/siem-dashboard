@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIEM Dashboard — Ciarán Reilly</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0a0e17;--surface:#111827;--surface2:#1a2436;--accent:#00d4aa;
+          --red:#f87171;--yellow:#fbbf24;--green:#34d399;--blue:#60a5fa;
+          --text:#e2e8f0;--muted:#64748b;--border:rgba(0,212,170,0.12); }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(0,212,170,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,170,0.025) 1px,transparent 1px);background-size:50px 50px;}
+  nav{position:sticky;top:0;z-index:50;background:rgba(10,14,23,0.9);backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);padding:0 1.5rem;height:56px;
+      display:flex;align-items:center;justify-content:space-between;}
+  .nav-logo{font-family:'Space Mono',monospace;font-size:13px;color:var(--accent);}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .status-label{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-left:6px;}
+  main{position:relative;z-index:1;max-width:1300px;margin:0 auto;padding:1.5rem;}
+  .toolbar{display:flex;gap:.75rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;}
+  .btn{font-family:'Space Mono',monospace;font-size:11px;padding:.45rem 1rem;border-radius:4px;
+       border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;transition:all .2s;}
+  .btn:hover{background:var(--surface);border-color:var(--accent);color:var(--accent);}
+  .btn-accent{background:var(--accent);color:#0a0e17;border-color:var(--accent);font-weight:700;}
+  .btn-accent:hover{background:transparent;color:var(--accent);}
+  .upload-label{font-family:'Space Mono',monospace;font-size:11px;padding:.45rem 1rem;border-radius:4px;
+                border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;}
+  .upload-label:hover{border-color:var(--accent);color:var(--accent);}
+  #file-input{display:none;}
+  .toolbar-msg{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;}
+  .stat-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;margin-bottom:.5rem;text-transform:uppercase;}
+  .stat-value{font-family:'Space Mono',monospace;font-size:1.75rem;font-weight:700;color:#fff;}
+  .stat-value.red{color:var(--red);}.stat-value.yellow{color:var(--yellow);}.stat-value.green{color:var(--green);}.stat-value.accent{color:var(--accent);}
+  .charts-row{display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.5rem;}
+  @media(max-width:800px){.charts-row{grid-template-columns:1fr;}}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;}
+  .card-title{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:.08em;margin-bottom:1rem;}
+  .chart-wrap{position:relative;height:200px;}
+  .alerts-section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;}
+  .alerts-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;}
+  .filter-btns{display:flex;gap:.4rem;}
+  .filter-btn{font-family:'Space Mono',monospace;font-size:10px;padding:.3rem .7rem;border-radius:3px;
+              border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;}
+  .filter-btn.active,.filter-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .filter-btn.high.active{border-color:var(--red);color:var(--red);}
+  .filter-btn.medium.active{border-color:var(--yellow);color:var(--yellow);}
+  .filter-btn.low.active{border-color:var(--green);color:var(--green);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-align:left;
+     padding:.5rem .75rem;border-bottom:1px solid var(--border);letter-spacing:.06em;}
+  td{padding:.6rem .75rem;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(255,255,255,0.02);}
+  .badge{display:inline-block;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;
+         padding:.2rem .55rem;border-radius:3px;letter-spacing:.04em;}
+  .badge-HIGH{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.25);}
+  .badge-MEDIUM{background:rgba(251,191,36,.12);color:var(--yellow);border:1px solid rgba(251,191,36,.2);}
+  .badge-LOW{background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.2);}
+  .empty-state{text-align:center;padding:3rem;font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);}
+  .bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;}
+  @media(max-width:700px){.bottom-row{grid-template-columns:1fr;}}
+  .ip-bar-row{display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem;}
+  .ip-label{font-family:'Space Mono',monospace;font-size:11px;color:var(--text);min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ip-bar-track{flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+  .ip-bar-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .5s ease;}
+  .ip-count{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);min-width:28px;text-align:right;}
+</style>
+</head>
+<body>
+<nav>
+  <span class="nav-logo">■ SIEM DASHBOARD</span>
+  <div style="display:flex;align-items:center;">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-label" id="status-label">IDLE</span>
+  </div>
+</nav>
+<main>
+  <div class="toolbar">
+    <button class="btn btn-accent" onclick="loadSample()">Load sample log</button>
+    <label class="upload-label" for="file-input">↑ Upload log file</label>
+    <input type="file" id="file-input" accept=".log,.txt" onchange="uploadFile(this)">
+    <button class="btn" onclick="refresh()">↻ Refresh</button>
+    <span class="toolbar-msg" id="toolbar-msg"></span>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Total Events</div><div class="stat-value accent" id="s-total">0</div></div>
+    <div class="stat-card"><div class="stat-label">Failed Logins</div><div class="stat-value red" id="s-failed">0</div></div>
+    <div class="stat-card"><div class="stat-label">Successful Logins</div><div class="stat-value green" id="s-success">0</div></div>
+    <div class="stat-card"><div class="stat-label">Unique IPs</div><div class="stat-value" id="s-ips">0</div></div>
+    <div class="stat-card"><div class="stat-label">High Alerts</div><div class="stat-value red" id="s-high">0</div></div>
+    <div class="stat-card"><div class="stat-label">Medium Alerts</div><div class="stat-value yellow" id="s-medium">0</div></div>
+    <div class="stat-card"><div class="stat-label">Low Alerts</div><div class="stat-value green" id="s-low">0</div></div>
+    <div class="stat-card"><div class="stat-label">Total Alerts</div><div class="stat-value red" id="s-alerts">0</div></div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-card"><div class="card-title">EVENT TIMELINE</div><div class="chart-wrap"><canvas id="timeline-chart"></canvas></div></div>
+    <div class="chart-card"><div class="card-title">ALERT SEVERITY</div><div class="chart-wrap"><canvas id="severity-chart"></canvas></div></div>
+  </div>
+  <div class="alerts-section">
+    <div class="alerts-header">
+      <div class="card-title" style="margin:0">ALERTS FEED</div>
+      <div class="filter-btns">
+        <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn high"   onclick="setFilter('HIGH',this)">High</button>
+        <button class="filter-btn medium" onclick="setFilter('MEDIUM',this)">Medium</button>
+        <button class="filter-btn low"    onclick="setFilter('LOW',this)">Low</button>
+      </div>
+    </div>
+    <table><thead><tr><th>Time</th><th>Severity</th><th>Rule</th><th>Source</th><th>Detail</th></tr></thead>
+    <tbody id="alerts-body"><tr><td colspan="5" class="empty-state">Load a log file to begin analysis</td></tr></tbody></table>
+  </div>
+  <div class="bottom-row">
+    <div class="chart-card"><div class="card-title">TOP SOURCE IPs</div><div id="top-ips-list"></div></div>
+    <div class="chart-card">
+      <div class="card-title">ACTIVE DETECTION RULES</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.25rem;">
+        <div style="font-size:12px;color:var(--text);padding:.4rem .6rem;background:rgba(248,113,113,.07);border-left:2px solid var(--red);border-radius:0 4px 4px 0;">SSH Brute Force Detection</div>
+        <div style="font-size:12px;color:var(--text);padding:.4rem .6rem;background:rgba(248,113,113,.07);border-left:2px solid var(--red);border-radius:0 4px 4px 0;">Login After Multiple Failures</div>
+        <div style="font-size:12px;color:var(--text);padding:.4rem .6rem;background:rgba(248,113,113,.07);border-left:2px solid var(--red);border-radius:0 4px 4px 0;">Risky Sudo Command</div>
+        <div style="font-size:12px;color:var(--text);padding:.4rem .6rem;background:rgba(251,191,36,.07);border-left:2px solid var(--yellow);border-radius:0 4px 4px 0;">Invalid User Scan</div>
+        <div style="font-size:12px;color:var(--text);padding:.4rem .6rem;background:rgba(251,191,36,.07);border-left:2px solid var(--yellow);border-radius:0 4px 4px 0;">Sudo Authentication Failures</div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+let tlChart,sevChart,currentFilter='all';
+function initCharts(){
+  const grid='rgba(255,255,255,0.05)',tick='#64748b';
+  tlChart=new Chart(document.getElementById('timeline-chart'),{type:'bar',
+    data:{labels:[],datasets:[{label:'Events',data:[],backgroundColor:'rgba(0,212,170,0.4)',borderColor:'#00d4aa',borderWidth:1,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{color:grid},ticks:{color:tick,font:{family:'Space Mono',size:10}}},
+              y:{grid:{color:grid},ticks:{color:tick,font:{family:'Space Mono',size:10}}}}}});
+  sevChart=new Chart(document.getElementById('severity-chart'),{type:'doughnut',
+    data:{labels:['High','Medium','Low'],datasets:[{data:[0,0,0],
+      backgroundColor:['rgba(248,113,113,.7)','rgba(251,191,36,.7)','rgba(52,211,153,.7)'],
+      borderColor:['#f87171','#fbbf24','#34d399'],borderWidth:1}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{family:'Space Mono',size:10}}}}}});}
+async function refresh(){
+  try{
+    const[stats,alerts,tl,ips]=await Promise.all([
+      fetch('/api/stats').then(r=>r.json()),
+      fetch(`/api/alerts${currentFilter!=='all'?'?severity='+currentFilter:''}`).then(r=>r.json()),
+      fetch('/api/timeline').then(r=>r.json()),
+      fetch('/api/top_ips').then(r=>r.json())]);
+    document.getElementById('s-total').textContent=stats.total_events;
+    document.getElementById('s-failed').textContent=stats.failed_logins;
+    document.getElementById('s-success').textContent=stats.successful_logins;
+    document.getElementById('s-ips').textContent=stats.unique_ips;
+    document.getElementById('s-high').textContent=stats.alerts_high;
+    document.getElementById('s-medium').textContent=stats.alerts_medium;
+    document.getElementById('s-low').textContent=stats.alerts_low;
+    document.getElementById('s-alerts').textContent=stats.total_alerts;
+    tlChart.data.labels=tl.map(t=>t.hour);
+    tlChart.data.datasets[0].data=tl.map(t=>t.count);tlChart.update();
+    sevChart.data.datasets[0].data=[stats.alerts_high,stats.alerts_medium,stats.alerts_low];sevChart.update();
+    renderAlerts(alerts);renderIPs(ips);
+    if(stats.total_events>0){document.getElementById('status-dot').style.background='#34d399';document.getElementById('status-label').textContent='LIVE';}
+  }catch(e){console.error(e);}
+}
+function renderAlerts(alerts){
+  const tb=document.getElementById('alerts-body');
+  if(!alerts.length){tb.innerHTML='<tr><td colspan="5" class="empty-state">No alerts found</td></tr>';return;}
+  tb.innerHTML=alerts.map(a=>`<tr>
+    <td style="font-family:'Space Mono',monospace;font-size:11px;color:#64748b;white-space:nowrap">${a.time||'--'}</td>
+    <td><span class="badge badge-${a.severity}">${a.severity}</span></td>
+    <td style="font-size:12px;font-weight:500;white-space:nowrap">${a.rule}</td>
+    <td style="font-family:'Space Mono',monospace;font-size:11px;color:#60a5fa">${a.source}</td>
+    <td style="font-size:12px;color:#94a3b8">${a.detail}</td></tr>`).join('');
+}
+function renderIPs(ips){
+  const el=document.getElementById('top-ips-list');
+  if(!ips.length){el.innerHTML='<p style="font-size:12px;color:#64748b;text-align:center;padding:1rem">No data yet</p>';return;}
+  const max=ips[0].count;
+  el.innerHTML=ips.map(i=>`<div class="ip-bar-row">
+    <span class="ip-label">${i.ip}</span>
+    <div class="ip-bar-track"><div class="ip-bar-fill" style="width:${Math.round(i.count/max*100)}%"></div></div>
+    <span class="ip-count">${i.count}</span></div>`).join('');
+}
+function setFilter(f,btn){
+  currentFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');refresh();
+}
+async function loadSample(){
+  setMsg('Loading sample log...');
+  const r=await fetch('/api/load_sample').then(r=>r.json());
+  setMsg(r.message||r.error);
+  setTimeout(()=>{refresh();setMsg('');},800);
+  let n=0;const iv=setInterval(()=>{refresh();if(++n>8)clearInterval(iv);},600);
+}
+async function uploadFile(input){
+  if(!input.files[0])return;
+  const fd=new FormData();fd.append('file',input.files[0]);
+  setMsg(`Uploading ${input.files[0].name}...`);
+  const r=await fetch('/api/upload',{method:'POST',body:fd}).then(r=>r.json());
+  setMsg(r.message||r.error);setTimeout(refresh,1200);
+}
+function setMsg(m){document.getElementById('toolbar-msg').textContent=m;}
+initCharts();refresh();setInterval(refresh,3000);
+</script>
+</body>
+</html>
